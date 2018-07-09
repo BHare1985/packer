@@ -10,17 +10,34 @@ using System.Threading;
 
 namespace packer
 {
+    class Frame
+    {
+        public Frame(long size, long offset, long index)
+        {
+            Size = size;
+            Offset = offset;
+            Index = index;
+        }
+        public long Size { get; }
+        public long Offset { get; }
+        public long Index { get; }
+    }
     class Program
     {
         private static volatile object sync = new object();
 
         //fsutil file createnew C:\testfile.txt 1000
-        private static string source = @"C:\Users\John\Documents\bomb.txt";
-        private static string destination = @"C:\Users\John\Documents\destination.txt";
-        private static int chunkSize = 1024 * 1024;
-        private static int writeOffset = 0;
+        private static string source = @"D:\testfile.txt";
+        private static string destination = @"D:\destination.txt";
+        private static int chunkSize = 1 * 1024 * 1024; //1B * 1024 => 1KB * 1024 => 1MB
+        private static long writeOffset = 0;
+        private static long fileSize = 10 * chunkSize;
 
-        private static ThreadPool pool = new ThreadPool(10);
+        private static ThreadPool pool = new ThreadPool(4);
+        private static MemoryMappedFile mmf;
+        private static ConcurrentBag<Frame> Map = new ConcurrentBag<Frame>();
+        private static object WriteSync = new object();
+        private static long writeCount = 0;
 
         static void Main(string[] args)
         {
@@ -28,27 +45,47 @@ namespace packer
             var sourceLength = sourceInfo.Length;
             var sourceChunkCount = (int)Math.Ceiling(sourceLength / (decimal)chunkSize);
 
-            var fs = new FileStream(destination, FileMode.Create);
-            fs.Seek(10000, SeekOrigin.Begin);
-            fs.WriteByte(0);
-            fs.Close();
+            SetFileSize(destination, fileSize);
 
-            var mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map");
-
+            mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map");
             Enumerable.Range(0, sourceChunkCount).Select(Process).ToArray();
-
-            //Enumerable.Range(0, 100).Select(_ => { pool.Queue(() => Console.WriteLine("Print {0} from: {1}", _, Thread.CurrentThread.ManagedThreadId)); return _; }).ToArray();
-            //pool.Wait();
-            //pool.Dispose();
-            Console.ReadLine();
+            pool.Wait();
             mmf.Dispose();
+
+            SetFileSize(destination, writeOffset);
+
+            using (var fs = new FileStream(destination, FileMode.Append))
+            {
+                using(var writer = new BinaryWriter(fs))
+                {
+                    foreach(var point in Map)
+                    {
+                        writer.Write(point.Index);
+                        writer.Write(point.Offset);
+                        writer.Write(point.Size);
+                    }
+                    writer.Write(Map.Count);
+                }
+            }
+
+            pool.Dispose();
+
+            Console.ReadLine();
+        }
+
+        private static void SetFileSize(string file, long size)
+        {
+            using (var fs = new FileStream(file, FileMode.OpenOrCreate))
+                fs.SetLength(size);
         }
 
         private static int Process(int index)
         {
-            pool.Queue(() => ReadBytes(index), 3);
+            pool.Queue(3, (RB)ReadBytes, (object)index);
             return index;
         }
+
+        private delegate void ZP(byte[] array, int index);
 
         private static void Zip(byte[] array, int index)
         {
@@ -56,21 +93,41 @@ namespace packer
             var output = new MemoryStream();
             var zip = new GZipStream(output, CompressionMode.Compress);
             new MemoryStream(array).CopyTo(zip);
-            pool.Queue(() => WriteBytes(output.ToArray(), index), 1);
+            pool.Queue(1, (WB)WriteBytes, output.ToArray(), index);
         }
+
+        private delegate void WB(byte[] array, int index);
 
         private static void WriteBytes(byte[] array, int index)
         {
             Console.WriteLine("{1} Writing bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
+            long offset = 0;
+            lock (WriteSync)
+            {
+                offset = writeOffset;
+                if (writeOffset + array.Length > fileSize)
+                {
+                    SpinWait.SpinUntil(() => Interlocked.Read(ref writeCount) == 0);
+                    Interlocked.Add(ref fileSize, fileSize + chunkSize * 25);
+                    mmf.Dispose();
+                    SetFileSize(destination, fileSize);
+                    mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map");
+                }
+                Interlocked.Add(ref writeOffset, writeOffset + array.Length);
+            }
+            Interlocked.Increment(ref writeCount);
             using (var mmf = MemoryMappedFile.OpenExisting("map"))
             {
-                var dto = new ZipedData(array, index);
-                using (var accestor = mmf.CreateViewAccessor(writeOffset, Marshal.SizeOf<ZipedData>()))
+                using (var accestor = mmf.CreateViewAccessor(offset, array.Length))
                 {
-                    accestor.Write(0, ref dto);
+                    accestor.WriteArray(0, array, 0, array.Length);
                 }
             }
+            Interlocked.Decrement(ref writeCount);
+            Map.Add(new Frame(array.Length, offset, index));
         }
+
+        private delegate void RB(int index);
 
         private static void ReadBytes(int index)
         {
@@ -78,162 +135,13 @@ namespace packer
 
             using (var file = File.OpenRead(source))
             {
-                var offset = chunkSize * index;
+                long offset = chunkSize * (long)index;
                 file.Seek(offset, SeekOrigin.Begin);
                 var chunk = new byte[chunkSize];
                 var size = file.Read(chunk, 0, chunkSize);
-                pool.Queue(() => Zip(chunk, index), 2);
+                pool.Queue(2, (ZP)Zip, chunk, index);
             }
         }
 
-    }
-
-    public class Scheduler
-    {
-        public Scheduler()
-        {
-
-        }
-
-
-    }
-
-    public class ThreadPool : IDisposable
-    {
-        private ConcurrentQueue<Action> _read = new ConcurrentQueue<Action>();
-        private ConcurrentQueue<Action> _zip = new ConcurrentQueue<Action>();
-        private ConcurrentQueue<Action> _write = new ConcurrentQueue<Action>();
-        private ConcurrentBag<Thread> _workers = new ConcurrentBag<Thread>();
-        private object _sync = new object();
-        private int _threadCount;
-        private bool _disposed;
-
-        public ThreadPool(uint count)
-        {
-            _threadCount = (int)count;
-        }
-
-        public void Wait()
-        {
-            SpinWait.SpinUntil(() => _read.Count == 0 && _zip.Count == 0 && _write.Count == 0);
-        }
-
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        public virtual void Dispose(bool disposing)
-        {
-            if (_disposed) return;
-
-            if(disposing)
-            {
-                Console.WriteLine("Clearing queue");
-                _read.Clear();
-            }
-
-            _disposed = true;
-        }
-
-        ~ThreadPool()
-        {
-            Dispose(false);
-        }
-
-        public void Queue(Action payload, int type)
-        {
-            if (_workers.Count < _threadCount)
-            {
-                var worker = new Thread(new ThreadStart(Loop));
-                _workers.Add(worker);
-                worker.Start();
-            }
-            //var work = new Work<TOut>(payload);
-            switch (type)
-            {
-                case 1: _write.Enqueue(payload); break;
-                case 2: _zip.Enqueue(payload); break;
-                case 3: _read.Enqueue(payload); break;
-            }
-        }
-
-        
-
-        private void Loop()
-        {
-            while (!_disposed)
-            {
-                try
-                {
-                    Action work;
-                    if (_write.TryDequeue(out work) || _zip.TryDequeue(out work) || _read.TryDequeue(out work))
-                        work();
-                    else Thread.SpinWait(10);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("From {0}", Thread.CurrentThread.ManagedThreadId);
-                    Console.WriteLine(ex);
-                }
-            }
-        }
-
-        internal Work<T> Create<T>(Func<T> p)
-        {
-            return new Work<T>(p);
-        }
-    }
-
-    public class Work
-    {
-        protected readonly Delegate work;
-
-        public Work(Delegate work)
-        {
-            this.work = work;
-        }
-
-        internal void Run()
-        {
-            InternalRun();
-        }
-
-        protected virtual void InternalRun()
-        {
-            work.DynamicInvoke();
-        }
-    }
-
-    public class Work<T> : Work
-    {
-        public Work(Func<T> action) : base(action) { }
-        public Work(Action<T> action) : base(action) { }
-
-        protected override void InternalRun()
-        {
-            _result = (T)work.DynamicInvoke();
-        }
-
-        private T _result;
-
-        public T Result()
-        {
-            return _result;
-        }
-    }
-
-    public static class WorkExtension
-    {
-        public static Work<TOut> Then<TIn, TOut>(this Work<TIn> current, Func<TIn, TOut> then)
-        {
-            return new Work<TOut>(() => then(current.Result()));
-        }
-
-        public static Work Then<TIn>(this Work<TIn> current, Action<TIn> then)
-        {
-            return new Work((Action)(() => then(current.Result())));
-        }
     }
 }
