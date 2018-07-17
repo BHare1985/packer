@@ -27,8 +27,8 @@ namespace packer
         private static volatile object sync = new object();
 
         //fsutil file createnew C:\testfile.txt 1000
-        private static string source = @"D:\testfile.txt";
-        private static string destination = @"D:\destination.txt";
+        private static string source = @"C:\Users\John\source\repos\testfile.txt";
+        private static string destination = @"C:\Users\John\source\repos\destination.txt";
         private static int chunkSize = 1 * 1024 * 1024; //1B * 1024 => 1KB * 1024 => 1MB
         private static long writeOffset = 0;
         private static long fileSize = 10 * chunkSize;
@@ -36,8 +36,34 @@ namespace packer
         private static ThreadPool pool = new ThreadPool(4);
         private static MemoryMappedFile mmf;
         private static ConcurrentBag<Frame> Map = new ConcurrentBag<Frame>();
-        private static object WriteSync = new object();
         private static long writeCount = 0;
+        private static ManualResetEvent _fileExceedMaximumSize = new ManualResetEvent(true);
+
+        private delegate void RF();
+        private static void ResizeFile()
+        {
+            try
+            {
+                if (!_fileExceedMaximumSize.WaitOne(TimeSpan.FromTicks(1)))
+                {
+                    Console.WriteLine("Resize process already started. Skiping.");
+                    return;
+                }
+                _fileExceedMaximumSize.Reset();
+                Console.WriteLine("Threads blocked for write. Waiting pending write threads to exit...");
+                SpinWait.SpinUntil(() => Interlocked.Read(ref writeCount) == 0);
+                Console.WriteLine("Writing threads finished working. Resizing file...");
+                fileSize += chunkSize * 5;
+                mmf.Dispose();
+                //SetFileSize(destination, fileSize);
+                mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map", fileSize, MemoryMappedFileAccess.ReadWrite);
+                Console.WriteLine("File resized.");
+            }
+            finally
+            {
+                _fileExceedMaximumSize.Set();
+            }
+        }
 
         static void Main(string[] args)
         {
@@ -93,6 +119,8 @@ namespace packer
             var output = new MemoryStream();
             var zip = new GZipStream(output, CompressionMode.Compress);
             new MemoryStream(array).CopyTo(zip);
+            if (Interlocked.Read(ref writeOffset) + chunkSize * 5 > Interlocked.Read(ref fileSize))
+                pool.Queue(4, (RF)ResizeFile);
             pool.Queue(1, (WB)WriteBytes, output.ToArray(), index);
         }
 
@@ -101,30 +129,30 @@ namespace packer
         private static void WriteBytes(byte[] array, int index)
         {
             Console.WriteLine("{1} Writing bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
-            long offset = 0;
-            lock (WriteSync)
+
+            try
             {
-                offset = writeOffset;
-                if (writeOffset + array.Length > fileSize)
+                _fileExceedMaximumSize.WaitOne(Timeout.Infinite);
+                Console.WriteLine("{0} nothing to wait for. Continue working...", Thread.CurrentThread.ManagedThreadId);
+
+                Interlocked.Increment(ref writeCount);
+
+                using (var file = MemoryMappedFile.OpenExisting("map"))
                 {
-                    SpinWait.SpinUntil(() => Interlocked.Read(ref writeCount) == 0);
-                    Interlocked.Add(ref fileSize, fileSize + chunkSize * 25);
-                    mmf.Dispose();
-                    SetFileSize(destination, fileSize);
-                    mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map");
-                }
-                Interlocked.Add(ref writeOffset, writeOffset + array.Length);
-            }
-            Interlocked.Increment(ref writeCount);
-            using (var mmf = MemoryMappedFile.OpenExisting("map"))
-            {
-                using (var accestor = mmf.CreateViewAccessor(offset, array.Length))
-                {
-                    accestor.WriteArray(0, array, 0, array.Length);
+                    var sum = Interlocked.Add(ref writeOffset, array.Length);
+                    var offset = sum - array.Length;
+
+                    using (var accestor = file.CreateViewAccessor(offset, array.Length))
+                    {
+                        accestor.WriteArray(0, array, 0, array.Length);
+                    }
+                    Map.Add(new Frame(array.Length, offset, index));
                 }
             }
-            Interlocked.Decrement(ref writeCount);
-            Map.Add(new Frame(array.Length, offset, index));
+            finally
+            {
+                Interlocked.Decrement(ref writeCount);
+            }
         }
 
         private delegate void RB(int index);

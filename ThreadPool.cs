@@ -20,7 +20,8 @@ namespace packer
             None,
             Write,
             Zip,
-            Read
+            Read,
+            Resize
         }
 
 
@@ -57,9 +58,11 @@ namespace packer
         private ConcurrentQueue<Work> _read = new ConcurrentQueue<Work>();
         private ConcurrentQueue<Work> _zip = new ConcurrentQueue<Work>();
         private ConcurrentQueue<Work> _write = new ConcurrentQueue<Work>();
+        private ConcurrentQueue<Work> _resize = new ConcurrentQueue<Work>();
         private ConcurrentBag<Task> _workers = new ConcurrentBag<Task>();
         private int _threadCount;
         private bool _disposed;
+        
 
         public ThreadPool(uint count)
         {
@@ -75,7 +78,7 @@ namespace packer
 
         public void Wait()
         {
-            SpinWait.SpinUntil(() => _read.Count == 0 && _zip.Count == 0 && _write.Count == 0 && _workers.All(w => w.State == State.Idle));
+            SpinWait.SpinUntil(() => _read.Count == 0 && _zip.Count == 0 && _write.Count == 0 && _resize.Count == 0 && _workers.All(w => w.State == State.Idle));
         }
 
         public void Queue(int priority, Delegate payload, params object[] args)
@@ -99,6 +102,7 @@ namespace packer
                 case 1: work.Queue = QueueType.Write; _write.Enqueue(work); break;
                 case 2: work.Queue = QueueType.Zip; _zip.Enqueue(work); break;
                 case 3: work.Queue = QueueType.Read; _read.Enqueue(work); break;
+                case 4: work.Queue = QueueType.Resize; _resize.Enqueue(work); break;
             }
         }
 
@@ -111,7 +115,7 @@ namespace packer
                 try
                 {
                     Work work;
-                    if (_write.TryDequeue(out work) || _zip.TryDequeue(out work) || _read.TryDequeue(out work))
+                    if (_resize.TryDequeue(out work) || _write.TryDequeue(out work) || _zip.TryDequeue(out work) || _read.TryDequeue(out work))
                     {
                         th.State = State.Working;
                         work.Run();
