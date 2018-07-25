@@ -10,14 +10,15 @@ using System.Threading;
 
 namespace packer
 {
-    class Frame
+    class Chunk
     {
-        public Frame(long size, long offset, long index)
+        public Chunk(long size, long offset, long index)
         {
             Size = size;
             Offset = offset;
             Index = index;
         }
+
         public long Size { get; }
         public long Offset { get; }
         public long Index { get; }
@@ -35,34 +36,37 @@ namespace packer
 
         private static ThreadPool pool = new ThreadPool(4);
         private static MemoryMappedFile mmf;
-        private static ConcurrentBag<Frame> Map = new ConcurrentBag<Frame>();
+        private static ConcurrentBag<Chunk> ChuncksMetadata = new ConcurrentBag<Chunk>();
         private static long writeCount = 0;
-        private static ManualResetEvent _fileExceedMaximumSize = new ManualResetEvent(true);
+        private static object _fileExceedMaximumSize = new object();
+        private static SemaphoreSlim _resize = new SemaphoreSlim(4, 4);
 
         private delegate void RF();
         private static void ResizeFile()
         {
+            if (fileSize > Interlocked.Read(ref writeOffset) + chunkSize * 4) return;
+            if (Monitor.IsEntered(_fileExceedMaximumSize)) return;
             try
             {
-                if (!_fileExceedMaximumSize.WaitOne(TimeSpan.FromTicks(1)))
+                lock (_fileExceedMaximumSize)
                 {
-                    Console.WriteLine("Resize process already started. Skiping.");
-                    return;
+                    Console.WriteLine("Threads blocked for a write. Waiting pending write threads to exit...");
+                    _resize.Wait(); _resize.Wait(); _resize.Wait(); _resize.Wait();
+                    SpinWait.SpinUntil(() => Interlocked.Read(ref writeCount) == 0);
+                    Console.WriteLine("Writing threads finished working. Resizing file...");
+                    fileSize += chunkSize * 5;
+                    mmf.Dispose();
+                    //SetFileSize(destination, fileSize);
+                    mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map", fileSize, MemoryMappedFileAccess.ReadWrite);
+                    Console.WriteLine("File resized.");
                 }
-                _fileExceedMaximumSize.Reset();
-                Console.WriteLine("Threads blocked for write. Waiting pending write threads to exit...");
-                SpinWait.SpinUntil(() => Interlocked.Read(ref writeCount) == 0);
-                Console.WriteLine("Writing threads finished working. Resizing file...");
-                fileSize += chunkSize * 5;
-                mmf.Dispose();
-                //SetFileSize(destination, fileSize);
-                mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map", fileSize, MemoryMappedFileAccess.ReadWrite);
-                Console.WriteLine("File resized.");
+                
             }
             finally
             {
-                _fileExceedMaximumSize.Set();
+                _resize.Release(4);
             }
+
         }
 
         static void Main(string[] args)
@@ -74,29 +78,65 @@ namespace packer
             SetFileSize(destination, fileSize);
 
             mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map");
-            Enumerable.Range(0, sourceChunkCount).Select(Process).ToArray();
+            Enumerable.Range(0, sourceChunkCount).Select(Compress).ToArray();
             pool.Wait();
             mmf.Dispose();
 
             SetFileSize(destination, writeOffset);
 
-            using (var fs = new FileStream(destination, FileMode.Append))
-            {
-                using(var writer = new BinaryWriter(fs))
-                {
-                    foreach(var point in Map)
-                    {
-                        writer.Write(point.Index);
-                        writer.Write(point.Offset);
-                        writer.Write(point.Size);
-                    }
-                    writer.Write(Map.Count);
-                }
-            }
+            WriteMetadata(destination, ChuncksMetadata);
+
+            var meta = ReadMetadata(destination);
+            meta.Select(Decompres);
 
             pool.Dispose();
 
             Console.ReadLine();
+        }
+
+        private static int Decompres(Chunk chunk)
+        {
+            pool.Queue(1, (RB)ReadBytes, chunk.Index, chunk.Offset, chunk.Size);
+            return (int)chunk.Index;
+        }
+
+        private static IEnumerable<Chunk> ReadMetadata(string file)
+        {
+            var info = new FileInfo(file);
+            
+            using (var fs = new FileStream(file, FileMode.Open))
+            {
+                using (var reader = new BinaryReader(fs))
+                {
+                    fs.Seek(info.Length - Marshal.SizeOf<long>(), SeekOrigin.Begin);
+                    var count = reader.ReadInt32();
+                    var metaOffset = count * (Marshal.SizeOf<long>() + Marshal.SizeOf<long>() + Marshal.SizeOf<long>()) + Marshal.SizeOf<long>();
+                    fs.Seek(info.Length - metaOffset, SeekOrigin.Begin);
+                    var chunks = new List<Chunk>(count);
+                    for(var i = 0; i < count; i++)
+                        chunks.Add(new Chunk(reader.ReadInt64(), reader.ReadInt64(), reader.ReadInt64()));
+                    return chunks;
+                }
+            }
+        }
+
+        private static void WriteMetadata(string file, IEnumerable<Chunk> chunks)
+        {
+            using (var fs = new FileStream(destination, FileMode.Append))
+            {
+                using (var writer = new BinaryWriter(fs))
+                {
+                    long count = 0;
+                    foreach (var chunk in chunks)
+                    {
+                        writer.Write(chunk.Size);
+                        writer.Write(chunk.Offset);
+                        writer.Write(chunk.Index);
+                        count++;
+                    }
+                    writer.Write(count);
+                }
+            }
         }
 
         private static void SetFileSize(string file, long size)
@@ -105,9 +145,9 @@ namespace packer
                 fs.SetLength(size);
         }
 
-        private static int Process(int index)
+        private static int Compress(int index)
         {
-            pool.Queue(3, (RB)ReadBytes, (object)index);
+            pool.Queue(3, (RB)ReadBytes, index, chunkSize * (long)index, chunkSize);
             return index;
         }
 
@@ -119,8 +159,8 @@ namespace packer
             var output = new MemoryStream();
             var zip = new GZipStream(output, CompressionMode.Compress);
             new MemoryStream(array).CopyTo(zip);
-            if (Interlocked.Read(ref writeOffset) + chunkSize * 5 > Interlocked.Read(ref fileSize))
-                pool.Queue(4, (RF)ResizeFile);
+
+            pool.Queue(4, (RF)ResizeFile);
             pool.Queue(1, (WB)WriteBytes, output.ToArray(), index);
         }
 
@@ -132,10 +172,9 @@ namespace packer
 
             try
             {
-                _fileExceedMaximumSize.WaitOne(Timeout.Infinite);
+                _resize.Wait();
+               
                 Console.WriteLine("{0} nothing to wait for. Continue working...", Thread.CurrentThread.ManagedThreadId);
-
-                Interlocked.Increment(ref writeCount);
 
                 using (var file = MemoryMappedFile.OpenExisting("map"))
                 {
@@ -146,27 +185,26 @@ namespace packer
                     {
                         accestor.WriteArray(0, array, 0, array.Length);
                     }
-                    Map.Add(new Frame(array.Length, offset, index));
+                    ChuncksMetadata.Add(new Chunk(array.Length, offset, index));
                 }
             }
             finally
             {
-                Interlocked.Decrement(ref writeCount);
+                _resize.Release();
             }
         }
 
-        private delegate void RB(int index);
+        private delegate void RB(int index, long offset, int length);
 
-        private static void ReadBytes(int index)
+        private static void ReadBytes(int index, long offset, int length)
         {
             Console.WriteLine("{1} Reading bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
 
             using (var file = File.OpenRead(source))
             {
-                long offset = chunkSize * (long)index;
                 file.Seek(offset, SeekOrigin.Begin);
-                var chunk = new byte[chunkSize];
-                var size = file.Read(chunk, 0, chunkSize);
+                var chunk = new byte[length];
+                var size = file.Read(chunk, 0, length);
                 pool.Queue(2, (ZP)Zip, chunk, index);
             }
         }
