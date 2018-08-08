@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
@@ -15,13 +16,13 @@ namespace packer
             Stopped
         }
 
-        private enum QueueType
+        public enum QueueType
         {
             None,
+            Resize,
             Write,
             Zip,
             Read,
-            Resize
         }
 
 
@@ -35,30 +36,45 @@ namespace packer
             public Thread Thread { get; }
         }
 
-        private class Work
+        public class Work
         {
-            private Delegate payload;
-            private object[] args;
+            internal Delegate payload;
+            internal IEnumerable<object> args;
 
-            public Work(Delegate payload, object[] args)
+            internal Work(Delegate payload, IEnumerable<object> args)
             {
                 this.payload = payload;
                 this.args = args;
             }
 
-            public QueueType Queue { get; internal set; }
+            private object result;
+            private Work next;
+            private QueueType priority;
 
-            public void Run()
+            public object Result => this.result;
+            public Work Next => this.next;
+            internal QueueType Priority => this.priority;
+
+            public Work Then(QueueType priority, Delegate payload, IEnumerable<object> args)
             {
-                payload.DynamicInvoke(args);
+                next = new Work(payload, args);
+                next.SetPriority(priority);
+                return next;
+            }
+
+            protected void SetPriority(QueueType priority)
+            {
+                this.priority = priority;
+            }
+
+            internal void Run()
+            {
+                result = payload.DynamicInvoke(args.ToArray());
+                return;
             }
         }
 
-
-        private ConcurrentQueue<Work> _read = new ConcurrentQueue<Work>();
-        private ConcurrentQueue<Work> _zip = new ConcurrentQueue<Work>();
-        private ConcurrentQueue<Work> _write = new ConcurrentQueue<Work>();
-        private ConcurrentQueue<Work> _resize = new ConcurrentQueue<Work>();
+        private ConcurrentQueue<Work>[] _queue = Enum.GetNames(typeof(QueueType)).Select(_ => new ConcurrentQueue<Work>()).ToArray();
         private ConcurrentBag<Task> _workers = new ConcurrentBag<Task>();
         private int _threadCount;
         private bool _disposed;
@@ -78,10 +94,10 @@ namespace packer
 
         public void Wait()
         {
-            SpinWait.SpinUntil(() => _read.Count == 0 && _zip.Count == 0 && _write.Count == 0 && _resize.Count == 0 && _workers.All(w => w.State == State.Idle));
+            SpinWait.SpinUntil(() => _queue.All(_ => _.Count == 0) && _workers.All(w => w.State == State.Idle));
         }
 
-        public void Queue(int priority, Delegate payload, params object[] args)
+        public Work Queue(QueueType priority, Delegate payload, params object[] args)
         {
             if (_workers.Count < _threadCount)
             {
@@ -97,13 +113,8 @@ namespace packer
                         _workers.Add(worker);
             }
             var work = new Work(payload, args);
-            switch (priority)
-            {
-                case 1: work.Queue = QueueType.Write; _write.Enqueue(work); break;
-                case 2: work.Queue = QueueType.Zip; _zip.Enqueue(work); break;
-                case 3: work.Queue = QueueType.Read; _read.Enqueue(work); break;
-                case 4: work.Queue = QueueType.Resize; _resize.Enqueue(work); break;
-            }
+            _queue[(int)priority - 1].Enqueue(work);
+            return work;
         }
 
         private void Loop(object o)
@@ -114,11 +125,21 @@ namespace packer
             {
                 try
                 {
-                    Work work;
-                    if (_resize.TryDequeue(out work) || _write.TryDequeue(out work) || _zip.TryDequeue(out work) || _read.TryDequeue(out work))
+                    Work work = null;
+                    if (_queue.Any(_ => _.TryDequeue(out work)))
                     {
                         th.State = State.Working;
                         work.Run();
+                        if(work.Next != null)
+                        {
+                            //if(work.Result != null)
+                            //{
+                                //var args = new List<object>(work.Next.args);
+                                //args.Insert(0, work.Result);
+                                //work.Next.args = args.ToArray();
+                            //}
+                            _queue[(int)work.Next.Priority - 1].Enqueue(work.Next);
+                        }
                     }
                     else
                     {
