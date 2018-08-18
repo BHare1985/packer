@@ -34,7 +34,7 @@ namespace console
         private static long writeOffset = 0;
         private static long fileSize = 10 * chunkSize;
         private static int poolSize = 16;
-        private static ThreadPool pool = new ThreadPool((uint)poolSize);
+        private static ThreadPool.ThreadPool pool = new ThreadPool.ThreadPool(poolSize);
         private static MemoryMappedFile mmf;
         private static ConcurrentBag<Chunk> ChuncksMetadata = new ConcurrentBag<Chunk>();
         private static long writeCount = 0;
