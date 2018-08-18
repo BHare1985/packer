@@ -1,4 +1,5 @@
-﻿using System;
+﻿using packer;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -10,23 +11,8 @@ using System.Threading;
 
 namespace console
 {
-    class Chunk
-    {
-        public Chunk(long size, long offset, long index)
-        {
-            Size = size;
-            Offset = offset;
-            Index = index;
-        }
-
-        public long Size { get; }
-        public long Offset { get; }
-        public long Index { get; }
-    }
     class Program
     {
-        private static volatile object sync = new object();
-
         //fsutil file createnew C:\testfile.txt 1000
         private static string source = @"C:\Users\John\source\repos\testfile.txt";
         private static string destination = @"C:\Users\John\source\repos\destination.txt";

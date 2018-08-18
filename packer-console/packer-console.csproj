@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\packer\packer.csproj" />
     <ProjectReference Include="..\ThreadPool\ThreadPool.csproj" />
   </ItemGroup>
 
