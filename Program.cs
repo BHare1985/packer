@@ -41,7 +41,6 @@ namespace packer
         private static object _fileExceedMaximumSize = new object();
         private static SemaphoreSlim _resize = new SemaphoreSlim(poolSize, poolSize);
 
-        private delegate void RF();
         private static void ResizeFile()
         {
             if (fileSize > Interlocked.Read(ref writeOffset) + chunkSize * poolSize) return;
@@ -55,7 +54,7 @@ namespace packer
                     Enumerable.Range(0, poolSize).Select(_ => { _resize.Wait(); return _; }).ToArray();
                     SpinWait.SpinUntil(() => Interlocked.Read(ref writeCount) == 0);
                     Console.WriteLine("Writing threads finished working. Resizing file...");
-                    fileSize += chunkSize * 5;
+                    fileSize += chunkSize * poolSize;
                     mmf.Dispose();
                     //SetFileSize(destination, fileSize);
                     mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map", fileSize, MemoryMappedFileAccess.ReadWrite);
@@ -72,6 +71,7 @@ namespace packer
 
         static void Main(string[] args)
         {
+            Console.ReadLine();
             var sourceInfo = new FileInfo(source);
             var sourceLength = sourceInfo.Length;
             var sourceChunkCount = (int)Math.Ceiling(sourceLength / (decimal)chunkSize);
@@ -79,27 +79,28 @@ namespace packer
             SetFileSize(destination, fileSize);
 
             mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map");
-            Enumerable.Range(0, sourceChunkCount).Select(Compress).ToArray();
+            for(var i = 0; i < sourceChunkCount; i++)
+                Compress(i);
             pool.Wait();
             mmf.Dispose();
+            pool.Dispose();
 
             SetFileSize(destination, writeOffset);
 
             WriteMetadata(destination, ChuncksMetadata);
 
+            ChuncksMetadata.Clear();
             //var meta = ReadMetadata(destination);
             //meta.Select(Decompres);
-
-            pool.Dispose();
-
+            
             Console.ReadLine();
         }
 
         private static int Decompres(Chunk chunk)
         {
-            var read = pool.Queue(ThreadPool.QueueType.Read, (RB)ReadBytes, chunk.Index, chunk.Offset, chunk.Size);
-            IEnumerable<object> ReadArgs() { yield return read.Result; yield return chunk.Index; }
-            var zip = read.Then(ThreadPool.QueueType.Zip, (ZP)Zip, ReadArgs());
+            //var read = pool.Queue(ThreadPool.QueueType.Read, (RB)ReadBytes, chunk.Index, chunk.Offset, chunk.Size);
+            //IEnumerable<object> ReadArgs() { yield return read.Result; yield return chunk.Index; }
+            //var zip = read.Then(ThreadPool.QueueType.Zip, (ZP)Zip, ReadArgs());
             return (int)chunk.Index;
         }
 
@@ -150,16 +151,12 @@ namespace packer
 
         private static int Compress(int index)
         {
-            var read = pool.Queue(ThreadPool.QueueType.Read, (RB)ReadBytes, index, chunkSize * (long)index, chunkSize);
-            IEnumerable<object> ReadArgs() { yield return read.Result; yield return index; }
-            var zip = read.Then(ThreadPool.QueueType.Zip, (ZP)Zip, ReadArgs());
-            IEnumerable<object> WriteArgs() { yield return zip.Result; yield return index; }
-            var write = zip.Then(ThreadPool.QueueType.Write, (WB)WriteBytes, WriteArgs());
-            write.Then(ThreadPool.QueueType.Resize, (RF)ResizeFile, Enumerable.Empty<object>());
+            var read = pool.Queue(ThreadPool.QueueType.Read, () => ReadBytes(index, chunkSize * (long)index, chunkSize));
+            var zip = read.Then(ThreadPool.QueueType.Zip, () => Zip(read.Result, index));
+            var write = zip.Then(ThreadPool.QueueType.Write, () => WriteBytes(zip.Result, index));
+                        zip.Then(ThreadPool.QueueType.Resize, () => ResizeFile());
             return index;
         }
-
-        private delegate byte[] ZP(byte[] array, int index);
 
         private static byte[] Zip(byte[] array, int index)
         {
@@ -168,11 +165,7 @@ namespace packer
             var zip = new GZipStream(output, CompressionMode.Compress);
             new MemoryStream(array).CopyTo(zip);
             return output.ToArray();
-            //pool.Queue(ThreadPool.QueueType.Resize, (RF)ResizeFile);
-            //pool.Queue(ThreadPool.QueueType.Write, (WB)WriteBytes, output.ToArray(), index);
         }
-
-        private delegate void WB(byte[] array, int index);
 
         private static void WriteBytes(byte[] array, int index)
         {
@@ -203,8 +196,6 @@ namespace packer
             }
         }
 
-        private delegate byte[] RB(int index, long offset, int length);
-
         private static byte[] ReadBytes(int index, long offset, int length)
         {
             Console.WriteLine("{1} Reading bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
@@ -215,7 +206,6 @@ namespace packer
                 var chunk = new byte[length];
                 var size = file.Read(chunk, 0, length);
                 return chunk;
-                //pool.Queue(ThreadPool.QueueType.Zip, (ZP)Zip, chunk, index);
             }
         }
 

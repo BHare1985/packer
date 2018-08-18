@@ -36,41 +36,76 @@ namespace packer
             public Thread Thread { get; }
         }
 
-        public class Work
+        public interface IWork<T>
+        {
+            T Result { get; }
+        }
+
+
+        public class Work<T> : Work, IWork<T>
+        {
+            internal Work(Delegate payload) : base(payload)
+            {
+                
+            }
+
+            private T result;
+            public T Result => this.result;
+
+            internal override void Run()
+            {
+                result = (T)payload.DynamicInvoke();
+            }
+        }
+
+        public class Work : IDisposable
         {
             internal Delegate payload;
-            internal IEnumerable<object> args;
 
-            internal Work(Delegate payload, IEnumerable<object> args)
+            internal Work(Delegate payload)
             {
                 this.payload = payload;
-                this.args = args;
             }
 
-            private object result;
-            private Work next;
             private QueueType priority;
 
-            public object Result => this.result;
-            public Work Next => this.next;
             internal QueueType Priority => this.priority;
 
-            public Work Then(QueueType priority, Delegate payload, IEnumerable<object> args)
-            {
-                next = new Work(payload, args);
-                next.SetPriority(priority);
-                return next;
-            }
-
-            protected void SetPriority(QueueType priority)
+            internal void SetPriority(QueueType priority)
             {
                 this.priority = priority;
             }
 
-            internal void Run()
+            virtual internal void Run()
             {
-                result = payload.DynamicInvoke(args.ToArray());
-                return;
+                payload.DynamicInvoke();
+            }
+
+
+            private ConcurrentBag<Work> next = new ConcurrentBag<Work>();
+            public IEnumerable<Work> Next => this.next;
+
+            public Work Then(QueueType priority, Action payload)
+            {
+                var job = new Work(payload);
+                job.SetPriority(priority);
+                next.Add(job);
+                return job;
+            }
+
+            public Work<TResult> Then<TResult>(QueueType priority, Func<TResult> payload)
+            {
+                var job = new Work<TResult>(payload);
+                job.SetPriority(priority);
+                next.Add(job);
+                return job;
+            }
+
+            public void Dispose()
+            {
+                payload = null;
+                next.Clear();
+                next = null;
             }
         }
 
@@ -89,6 +124,7 @@ namespace packer
         {
             _disposed = true;
             SpinWait.SpinUntil(() => _workers.All(w => w.State == State.Stopped));
+            _workers.Clear();
             Console.WriteLine("Pool disposed...");
         }
 
@@ -97,7 +133,7 @@ namespace packer
             SpinWait.SpinUntil(() => _queue.All(_ => _.Count == 0) && _workers.All(w => w.State == State.Idle));
         }
 
-        public Work Queue(QueueType priority, Delegate payload, params object[] args)
+        public Work<T> Queue<T>(QueueType priority, Func<T> payload)
         {
             if (_workers.Count < _threadCount)
             {
@@ -105,14 +141,22 @@ namespace packer
                 _workers.Add(worker);
                 worker.Thread.Start(worker);
             }
-            else
+
+            var work = new Work<T>(payload);
+            _queue[(int)priority - 1].Enqueue(work);
+            return work;
+        }
+
+        public Work Queue(QueueType priority, Delegate payload)
+        {
+            if (_workers.Count < _threadCount)
             {
-                Task worker;
-                if (_workers.TryTake(out worker))
-                    if (worker.State != State.Stopped)
-                        _workers.Add(worker);
+                var worker = new Task(new Thread(new ParameterizedThreadStart(Loop)));
+                _workers.Add(worker);
+                worker.Thread.Start(worker);
             }
-            var work = new Work(payload, args);
+
+            var work = new Work(payload);
             _queue[(int)priority - 1].Enqueue(work);
             return work;
         }
@@ -130,15 +174,11 @@ namespace packer
                     {
                         th.State = State.Working;
                         work.Run();
-                        if(work.Next != null)
+                        if (work.Next != null)
                         {
-                            //if(work.Result != null)
-                            //{
-                                //var args = new List<object>(work.Next.args);
-                                //args.Insert(0, work.Result);
-                                //work.Next.args = args.ToArray();
-                            //}
-                            _queue[(int)work.Next.Priority - 1].Enqueue(work.Next);
+                            foreach (var next in work.Next)
+                                _queue[(int)next.Priority - 1].Enqueue(next);
+                            work.Dispose();
                         }
                     }
                     else
