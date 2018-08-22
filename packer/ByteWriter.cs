@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO.MemoryMappedFiles;
-using System.Text;
 using System.Threading;
 
 namespace packer
@@ -20,18 +17,21 @@ namespace packer
             Console.WriteLine("{1} Writing bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
             var offset = _manager.GetOffset(array);
 
-            using (var writer = _manager.GetWriter())
+            try
             {
-                Console.WriteLine("{0} nothing to wait for. Continue working...", Thread.CurrentThread.ManagedThreadId);
-
-                using (var file = MemoryMappedFile.OpenExisting("map"))
+                using (var map = _manager.BeginWrite())
                 {
-                    using (var accestor = file.CreateViewAccessor(offset, array.Length))
+                    Console.WriteLine("{0} nothing to wait for. Continue working...", Thread.CurrentThread.ManagedThreadId);
+                    using (var accestor = map.CreateViewAccessor(offset, array.Length))
                     {
                         accestor.WriteArray(0, array, 0, array.Length);
                     }
                     return new Chunk(array.Length, offset, index);
                 }
+            }
+            finally
+            {
+                _manager.EndWrite();
             }
         }
     }

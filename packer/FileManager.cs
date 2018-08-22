@@ -5,100 +5,89 @@ using System.Threading;
 
 namespace packer
 {
-    public class FileResize
-    {
-        private readonly FileManager _manager;
-
-        public FileResize(FileManager manager)
-        {
-            _manager = manager;
-            _manager.OnFileSizeChanged += Manager_OnFileSizeChanged;
-        }
-
-        private void Manager_OnFileSizeChanged(object sender, FileSizeChangedArgs args)
-        {
-            
-            if (fileSize > _manager.CurrentOffset + chunkSize * poolSize) return;
-
-            if (Monitor.IsEntered(_fileExceedMaximumSize)) return;
-            try
-            {
-                lock (_fileExceedMaximumSize)
-                {
-                    Console.WriteLine("Threads blocked for a write. Waiting pending write threads to exit...");
-                    Enumerable.Range(0, poolSize).Select(_ => { _resize.Wait(); return _; }).ToArray();
-                    Console.WriteLine("Writing threads finished working. Resizing file...");
-                    fileSize += chunkSize * poolSize;
-                    _mmf.Dispose();
-                    _mmf = MemoryMappedFile.CreateFromFile(destination, FileMode.OpenOrCreate, "map", fileSize, MemoryMappedFileAccess.ReadWrite);
-                    Console.WriteLine("File resized.");
-                }
-            }
-            finally
-            {
-                _resize.Release(poolSize);
-            }
-        }
-    }
-
-    public class FileSizeChangedArgs : EventArgs { }
-
-    public delegate void FileSizeChanged(object sender, FileSizeChangedArgs args);
-
     public class FileManager : IDisposable
     {
         private string _file;
+        private readonly int _threads;
         private long _fileSize;
         protected long _writeOffset;
-        private SemaphoreSlim _resize;
+        private SemaphoreSlim _semaphore;
         private MemoryMappedFile _mmf;
+        private object _sync;
+        private long _median;
 
         public FileManager(string file, int threads)
         {
             _file = file;
+            _threads = threads;
             _writeOffset = 0;
-            _resize = new SemaphoreSlim(threads, threads);
-            _mmf = MemoryMappedFile.CreateFromFile(file, FileMode.OpenOrCreate, "map");
+            _semaphore = new SemaphoreSlim(threads, threads);
+            _mmf = MemoryMappedFile.CreateFromFile(file, FileMode.OpenOrCreate, "map", 1);
+            _sync = new object();
         }
 
-        public event FileSizeChanged OnFileSizeChanged;
+        internal MemoryMappedFile BeginWrite()
+        {
+            _semaphore.Wait();
+            return MemoryMappedFile.OpenExisting("map");
+        }
 
         public long CurrentOffset => _writeOffset;
 
         public long GetOffset(byte[] array)
         {
             var sum = Interlocked.Add(ref _writeOffset, array.Length);
+            _median = (_median + array.Length) / 2;
             var offset = sum - array.Length;
-            this.OnFileSizeChanged(this, new FileSizeChangedArgs { });
+            Resize();
             return offset;
         }
 
-        public FileWriter GetWriter()
+        internal void EndWrite()
         {
-            return new FileWriter(_resize);
+            _semaphore.Release();
+        }
+
+        private bool IsThreshold()
+        {
+            return _fileSize < _writeOffset + _median * _threads;
+        }
+
+        private void Resize()
+        {
+            if (!IsThreshold()) return;
+
+            if (Monitor.IsEntered(_sync)) return;
+            lock (_sync)
+            {
+                if (!IsThreshold()) return;
+                try
+                {
+                    for (int i = 0; i < _threads; i++)
+                        _semaphore.Wait();
+                    _fileSize += _median * _threads;
+                    _mmf.Dispose();
+                    _mmf = MemoryMappedFile.CreateFromFile(_file, FileMode.OpenOrCreate, "map", _fileSize, MemoryMappedFileAccess.ReadWrite);
+                    Console.WriteLine("File resized.");
+                }
+                finally
+                {
+                    _semaphore.Release(_threads);
+                }
+            }
         }
 
         public void Dispose()
         {
             _mmf.Dispose();
-            _resize.Dispose();
-
+            _semaphore.Dispose();
+            SetFileSize(_file, _writeOffset);
         }
 
-        public sealed class FileWriter : IDisposable
+        private static void SetFileSize(string file, long size)
         {
-            private readonly SemaphoreSlim _semaphore;
-
-            public FileWriter(SemaphoreSlim semaphore)
-            {
-                _semaphore = semaphore;
-                _semaphore.Wait();
-            }
-
-            public void Dispose()
-            {
-                _semaphore.Release();
-            }
+            using (var fs = new FileStream(file, FileMode.OpenOrCreate))
+                fs.SetLength(size);
         }
     }
 }
