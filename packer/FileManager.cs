@@ -55,9 +55,8 @@ namespace packer
 
         private void Resize()
         {
-            if (!IsThreshold()) return;
+            if (!IsThreshold() || Monitor.IsEntered(_sync)) return;
 
-            if (Monitor.IsEntered(_sync)) return;
             lock (_sync)
             {
                 if (!IsThreshold()) return;
@@ -68,7 +67,6 @@ namespace packer
                     _fileSize += _median * _threads;
                     _mmf.Dispose();
                     _mmf = MemoryMappedFile.CreateFromFile(_file, FileMode.OpenOrCreate, "map", _fileSize, MemoryMappedFileAccess.ReadWrite);
-                    Console.WriteLine("File resized.");
                 }
                 finally
                 {
