@@ -5,18 +5,25 @@ namespace packer
 {
     internal class ByteWriter
     {
-        private readonly FileManager _manager;
+        private readonly IFileManager _manager;
 
-        public ByteWriter(FileManager manager)
+        public ByteWriter(IFileManager manager)
         {
             _manager = manager;
         }
 
-        public Chunk Write(byte[] array, int index)
+        public Chunk Write(byte[] array, long index)
         {
             Console.WriteLine("{1} Writing bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
-            var offset = _manager.GetOffset(array);
+            var offset = _manager.GetOffset(array, index);
 
+            return Write(array, index, offset);
+        }
+
+        public Chunk Write(byte[] array, long index, long offset)
+        {
+            Console.WriteLine("{1} Writing bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
+            
             try
             {
                 using (var map = _manager.BeginWrite())

@@ -9,16 +9,20 @@ namespace packer
         private readonly CompressFactory _factory;
         private readonly CompressSettings _settings;
 
-        public CompressStrategy(CompressFactory factory, CompressSettings settings)
+        internal CompressStrategy(CompressFactory factory, CompressSettings settings)
         {
             _factory = factory;
             _settings = settings;
         }
 
+        public CompressStrategy(CompressSettings settings) : this(new CompressFactory(settings.PoolSize), settings)
+        {
+        }
+
         public void Work(string source, string destination)
         {
             var sourceInfo = new FileInfo(source);
-            var sourceChunkCount = (int)Math.Ceiling(sourceInfo.Length / (decimal)_settings.ChinkSize);
+            var sourceChunkCount = (int)Math.Ceiling(sourceInfo.Length / (decimal)_settings.ChunkSize);
             
             var chuncksMetadata = new ConcurrentBag<Chunk>();
 
@@ -33,7 +37,7 @@ namespace packer
                     for (var i = 0; i < sourceChunkCount; i++)
                     {
                         var index = i;
-                        var read = pool.Queue(ThreadPool.QueueType.Read, () => reader.Read(index, _settings.ChinkSize * (long)index, _settings.ChinkSize));
+                        var read = pool.Queue(ThreadPool.QueueType.Read, () => reader.Read(index, _settings.ChunkSize * (long)index, _settings.ChunkSize));
                         var zip = read.Then(ThreadPool.QueueType.Zip, () => compressor.Zip(read.Result, index));
                         zip.Then(ThreadPool.QueueType.Write, () => chuncksMetadata.Add(writer.Write(zip.Result, index)));
                     }
@@ -42,7 +46,7 @@ namespace packer
             }
 
             var metadata = _factory.GetMetadataWriter(destination);
-            metadata.Write(chuncksMetadata);
+            metadata.Write(chuncksMetadata, _settings.ChunkSize, sourceInfo.Length);
         }
     }
 }

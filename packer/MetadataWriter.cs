@@ -12,7 +12,7 @@ namespace packer
             _file = file;
         }
 
-        public void Write(IEnumerable<Chunk> chunks)
+        public void Write(IEnumerable<Chunk> chunks, long size, long length)
         {
             using (var fs = new FileStream(_file, FileMode.Append))
             {
@@ -26,6 +26,8 @@ namespace packer
                         writer.Write(chunk.Index);
                         count++;
                     }
+                    writer.Write(size);
+                    writer.Write(length);
                     writer.Write(count);
                 }
             }

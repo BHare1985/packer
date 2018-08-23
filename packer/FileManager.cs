@@ -1,11 +1,10 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Threading;
 
 namespace packer
 {
-    internal class FileManager : IDisposable
+    internal class CompressFileManager : IFileManager
     {
         private string _file;
         private readonly int _threads;
@@ -16,7 +15,7 @@ namespace packer
         private object _sync;
         private long _median;
 
-        public FileManager(string file, int threads)
+        public CompressFileManager(string file, int threads)
         {
             _file = file;
             _threads = threads;
@@ -26,7 +25,7 @@ namespace packer
             _sync = new object();
         }
 
-        internal MemoryMappedFile BeginWrite()
+        public MemoryMappedFile BeginWrite()
         {
             _semaphore.Wait();
             return MemoryMappedFile.OpenExisting("map");
@@ -34,7 +33,7 @@ namespace packer
 
         public long CurrentOffset => _writeOffset;
 
-        public long GetOffset(byte[] array)
+        public long GetOffset(byte[] array, long index)
         {
             var sum = Interlocked.Add(ref _writeOffset, array.Length);
             _median = (_median + array.Length) / 2;
@@ -43,7 +42,7 @@ namespace packer
             return offset;
         }
 
-        internal void EndWrite()
+        public void EndWrite()
         {
             _semaphore.Release();
         }

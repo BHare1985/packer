@@ -7,13 +7,18 @@ namespace packer
 {
     internal class Compressor
     {
-        public byte[] Zip(byte[] array, int index)
+        public byte[] Zip(byte[] array, long index)
         {
             Console.WriteLine("{1} Zipping from: {0}", Thread.CurrentThread.ManagedThreadId, index);
             var output = new MemoryStream();
-            var zip = new GZipStream(output, CompressionMode.Compress);
-            new MemoryStream(array).CopyTo(zip);
-            return output.ToArray();
+            using (var zip = new GZipStream(output, CompressionMode.Compress))
+            {
+                using (var from = new MemoryStream(array))
+                {
+                    from.CopyTo(zip);
+                    return output.ToArray();
+                }
+            }
         }
     }
 }

@@ -2,6 +2,7 @@
 {
     public class CompressSettings
     {
-        public int ChinkSize { get; set; }
+        public int ChunkSize { get; set; }
+        public int PoolSize { get; set; }
     }
 }

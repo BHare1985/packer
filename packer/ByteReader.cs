@@ -12,7 +12,7 @@ namespace packer
         {
             _file = file;
         }
-        public byte[] Read(int index, long offset, int length)
+        public byte[] Read(long index, long offset, long length)
         {
             Console.WriteLine("{1} Reading bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
 
@@ -20,7 +20,7 @@ namespace packer
             {
                 file.Seek(offset, SeekOrigin.Begin);
                 var chunk = new byte[length];
-                var size = file.Read(chunk, 0, length);
+                var size = file.Read(chunk, 0, (int)length);
                 return chunk;
             }
         }

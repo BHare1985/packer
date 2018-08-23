@@ -1,10 +1,10 @@
 ﻿namespace packer
 {
-    public class CompressFactory
+    public class DecompressFactory
     {
         private readonly int _poolSize;
 
-        public CompressFactory(int poolSize)
+        public DecompressFactory(int poolSize)
         {
             _poolSize = poolSize;
         }
@@ -14,9 +14,9 @@
             return new ThreadPool.ThreadPool(_poolSize);
         }
 
-        internal CompressFileManager GetFileManager(string file)
+        internal DecompressFileManager GetFileManager(string file, long size)
         {
-            return new CompressFileManager(file, _poolSize);
+            return new DecompressFileManager(file, size);
         }
 
         internal ByteReader GetByteReader(string file)
@@ -24,12 +24,12 @@
             return new ByteReader(file);
         }
 
-        internal Compressor GetCompressor()
+        internal Decompressor GetDecompressor()
         {
-            return new Compressor();
+            return new Decompressor();
         }
 
-        internal ByteWriter GetByteWriter(CompressFileManager manager)
+        internal ByteWriter GetByteWriter(IFileManager manager)
         {
             return new ByteWriter(manager);
         }
