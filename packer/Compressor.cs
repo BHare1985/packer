@@ -5,7 +5,7 @@ using System.Threading;
 
 namespace packer
 {
-    public class Compressor
+    internal class Compressor
     {
         public byte[] Zip(byte[] array, int index)
         {

@@ -3,7 +3,7 @@ using System.IO;
 
 namespace packer
 {
-    public class MetadataWriter
+    internal class MetadataWriter
     {
         private string _file;
 

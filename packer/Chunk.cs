@@ -1,6 +1,6 @@
 ﻿namespace packer
 {
-    public class Chunk
+    internal class Chunk
     {
         public Chunk(long size, long offset, long index)
         {

@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace packer
 {
-    public class ByteReader
+    internal class ByteReader
     {
         private string _file;
 

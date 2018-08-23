@@ -5,7 +5,7 @@ using System.Threading;
 
 namespace packer
 {
-    public class FileManager : IDisposable
+    internal class FileManager : IDisposable
     {
         private string _file;
         private readonly int _threads;

@@ -3,7 +3,7 @@ using System.Threading;
 
 namespace packer
 {
-    public class ByteWriter
+    internal class ByteWriter
     {
         private readonly FileManager _manager;
 

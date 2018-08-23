@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace packer
 {
-    public class MetadataReader
+    internal class MetadataReader
     {
         private string _file;
 
