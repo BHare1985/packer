@@ -1,6 +1,8 @@
-﻿namespace ThreadPool
+﻿using System;
+
+namespace ThreadPool
 {
-    internal interface IPriorityQueue
+    internal interface IPriorityQueue : IDisposable
     {
         int Count { get; }
         bool Dequeue(out Work work);

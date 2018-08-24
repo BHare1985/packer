@@ -7,39 +7,31 @@ namespace ThreadPool
 {
     public class ThreadPool : IDisposable
     {
+        private readonly ConcurrentBag<Task> _workers = new ConcurrentBag<Task>();
+        private readonly IPriorityQueue _queue;
+        private readonly int _threadCount;
+        private bool _disposed;
+        
         internal ThreadPool(IPriorityQueue queue, int count)
         {
-            this.queue = queue;
+            _queue = queue;
             _threadCount = count;
         }
 
-        public ThreadPool() : this(new PriorityQueue(), 1)
-        {
-        }
-
-        public ThreadPool(int count) : this(new PriorityQueue(), count)
-        {
-            
-        }
-
-        private ConcurrentBag<Task> _workers = new ConcurrentBag<Task>();
-        private int _threadCount;
-        private bool _disposed;
-        private readonly IPriorityQueue queue;
-
-        
+        public ThreadPool(int count) : this(new PriorityQueue(), count) { }
 
         public void Dispose()
         {
             _disposed = true;
             SpinWait.SpinUntil(() => _workers.All(w => w.State == State.Stopped));
             while(_workers.TryTake(out Task task)) { }
+            _queue.Dispose();
             Console.WriteLine("Pool disposed...");
         }
 
         public void Wait()
         {
-            SpinWait.SpinUntil(() => this.queue.Count == 0 && _workers.All(w => w.State == State.Idle));
+            SpinWait.SpinUntil(() => _queue.Count == 0 && _workers.All(w => w.State == State.Idle));
         }
 
         public WorkT<T> Queue<T>(QueueType priority, Func<T> payload)
@@ -52,21 +44,7 @@ namespace ThreadPool
             }
 
             var work = new WorkT<T>(payload);
-            queue.Enqueue(work, priority);
-            return work;
-        }
-
-        public Work Queue(QueueType priority, Delegate payload)
-        {
-            if (_workers.Count < _threadCount)
-            {
-                var worker = new Task(new Thread(new ParameterizedThreadStart(Loop)));
-                _workers.Add(worker);
-                worker.Thread.Start(worker);
-            }
-
-            var work = new Work(payload);
-            queue.Enqueue(work, priority);
+            _queue.Enqueue(work, priority);
             return work;
         }
 
@@ -78,14 +56,14 @@ namespace ThreadPool
             {
                 try
                 {
-                    if (queue.Dequeue(out Work work))
+                    if (_queue.Dequeue(out Work work))
                     {
                         th.State = State.Working;
                         work.Run();
                         if (work.Next != null)
                         {
                             foreach (var next in work.Next)
-                                queue.Enqueue(next, next.Priority);
+                                _queue.Enqueue(next, next.Priority);
                             work.Dispose();
                         }
                     }

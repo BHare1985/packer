@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace ThreadPool
 {
-    internal class PriorityQueue : IDisposable, IPriorityQueue
+    internal class PriorityQueue : IPriorityQueue
     {
         private Queue<Work>[] _queue;
         private object _sync;
