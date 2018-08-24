@@ -36,7 +36,7 @@ namespace packer
         public long GetOffset(byte[] array, long index)
         {
             var sum = Interlocked.Add(ref _writeOffset, array.Length);
-            _median = (_median + array.Length) / 2;
+            _median = _median == 0 ? array.Length : (_median + array.Length) / 2;
             var offset = sum - array.Length;
             Resize();
             return offset;

@@ -17,8 +17,8 @@ namespace packer.tests
             
         }
 
-        [OneTimeTearDown]
-        private void TearDown()
+        [TearDown]
+        public void TearDown()
         {
             if (File.Exists(_source))
                 File.Delete(_source);
@@ -32,9 +32,9 @@ namespace packer.tests
         public void Endtoend()
         {
             File.WriteAllText(_source, "Lorem!");
-            var compres = new CompressStrategy(new CompressSettings() { ChunkSize = 1024, PoolSize = 2 });
+            var compres = new CompressStrategy(new CompressSettings() { ChunkSize = 1024, PoolSize = 1 });
             compres.Work(_source, _compressed);
-            var decompress = new DecompressStrategy(2);
+            var decompress = new DecompressStrategy(1);
             decompress.Work(_compressed, _decompressed);
             CollectionAssert.AreEqual(File.ReadAllBytes(_source), File.ReadAllBytes(_decompressed));
         }
