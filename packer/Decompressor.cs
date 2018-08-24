@@ -1,7 +1,5 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.IO.Compression;
-using System.Threading;
 
 namespace packer
 {
@@ -9,12 +7,16 @@ namespace packer
     {
         public byte[] Zip(byte[] array, long index)
         {
-            Console.WriteLine("{1} Unsipping from: {0}", Thread.CurrentThread.ManagedThreadId, index);
-            var output = new MemoryStream();
-            using (var zip = new GZipStream(new MemoryStream(array), CompressionMode.Decompress))
+            using (var compressedStream = new MemoryStream(array))
             {
-                zip.CopyTo(output);
-                return output.ToArray();
+                using (var zipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
+                {
+                    using (var resultStream = new MemoryStream())
+                    {
+                        zipStream.CopyTo(resultStream);
+                        return resultStream.ToArray();
+                    }
+                }
             }
         }
     }

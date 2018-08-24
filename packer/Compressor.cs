@@ -1,7 +1,5 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.IO.Compression;
-using System.Threading;
 
 namespace packer
 {
@@ -9,14 +7,13 @@ namespace packer
     {
         public byte[] Zip(byte[] array, long index)
         {
-            Console.WriteLine("{1} Zipping from: {0}", Thread.CurrentThread.ManagedThreadId, index);
-            var output = new MemoryStream();
-            using (var zip = new GZipStream(output, CompressionMode.Compress))
+            using (var compressedStream = new MemoryStream())
             {
-                using (var from = new MemoryStream(array))
+                using (var zipStream = new GZipStream(compressedStream, CompressionMode.Compress))
                 {
-                    from.CopyTo(zip);
-                    return output.ToArray();
+                    zipStream.Write(array, 0, array.Length);
+                    zipStream.Close();
+                    return compressedStream.ToArray();
                 }
             }
         }

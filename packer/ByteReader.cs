@@ -21,6 +21,8 @@ namespace packer
                 file.Seek(offset, SeekOrigin.Begin);
                 var chunk = new byte[length];
                 var size = file.Read(chunk, 0, (int)length);
+                if (size != length)
+                    Array.Resize(ref chunk, size);
                 return chunk;
             }
         }
