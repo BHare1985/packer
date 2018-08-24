@@ -1,25 +1,64 @@
-﻿using packer;
+﻿using CommandLine;
+using packer;
+using System;
+using System.Collections.Generic;
 
 namespace console
 {
     class Program
     {
+        public class Options
+        {
+            [Option('s', "source", Required = true, HelpText = "Path to source file")]
+            public string Source { get; set; }
+
+            [Option('d', "destination", Required = true, HelpText = "Path to destination file")]
+            public string Destination { get; set; }
+
+            [Option('c', "chunksize", Required = false, Default = 1, HelpText = "Size of chunk in megabytes that will be used for compress")]
+            public int Chunksize { get; set; }
+
+            [Option('p', "poolsize", Required = false, Default = 4, HelpText = "Threads amount used for operations")]
+            public int Poolsize { get; set; }
+
+            [Option('o', "operation", Required = true, Default = Operations.Compress, HelpText = "Threads amount used for operations")]
+            public Operations Operation { get; set; }
+
+            public enum Operations
+            {
+                Compress,
+                Decompres
+            }
+        }
+
         //fsutil file createnew C:\testfile.txt 1000
         static void Main(string[] args)
         {
-            string source = @"C:\Users\John\source\repos\testfile.txt";
-            string destination = @"C:\Users\John\source\repos\90b3a02b-43cf-4ce2-abb4-d7639eb405b4.txt";
+            ParserResult<Options> result = Parser.Default.ParseArguments<Options>(args);
+            result.WithParsed(Work);
+            Console.ReadLine();
+        }
 
+        private static void Work(Options options)
+        {
+            switch (options.Operation)
             {
-                var settings = new CompressSettings { ChunkSize = 1 * 1024 * 1024, PoolSize = 4 }; //1B * 1024 => 1KB * 1024 => 1MB 
-                IStrategy strategy = new CompressStrategy(settings);
-                strategy.Work(source, destination);
+                case Options.Operations.Compress: Compress(options); break;
+                case Options.Operations.Decompres: Decompress(options); break;
             }
+        }
 
-            {
-                IStrategy strategy = new DecompressStrategy(4);
-                strategy.Work(destination, source);
-            }
+        private static void Compress(Options options)
+        {
+            var settings = new CompressSettings { ChunkSize = options.Chunksize * 1024 * 1024, PoolSize = options.Poolsize };
+            IStrategy strategy = new CompressStrategy(settings);
+            strategy.Work(options.Source, options.Destination);
+        }
+
+        private static void Decompress(Options options)
+        {
+            IStrategy strategy = new DecompressStrategy(options.Poolsize);
+            strategy.Work(options.Source, options.Destination);
         }
     }
 }
