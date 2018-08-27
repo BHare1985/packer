@@ -1,6 +1,6 @@
 ﻿namespace ThreadPool
 {
-    public interface IWork<T>
+    public interface IJob<T>
     {
         T Result { get; }
     }

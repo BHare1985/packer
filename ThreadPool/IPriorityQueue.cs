@@ -5,7 +5,7 @@ namespace ThreadPool
     internal interface IPriorityQueue : IDisposable
     {
         int Count { get; }
-        bool Dequeue(out Work work);
-        void Enqueue(Work work, QueueType priority);
+        bool Dequeue(out Job work);
+        void Enqueue(Job work, QueueType priority);
     }
 }
