@@ -1,4 +1,6 @@
-﻿using System.Linq;
+﻿using SimpleLogger;
+using System.Threading;
+using ThreadPool;
 
 namespace packer
 {
@@ -13,10 +15,14 @@ namespace packer
             _factory = factory;
         }
 
+        public string Name => "Decompression";
+
         public void Work(string source, string destination)
         {
-            var metaReader = new MetadataReader(source);
+            Logger.Log(Level.Debug, $"reading metadata from {source}");
+            var metaReader = _factory.GetMetadataReader(source);
             Metadata metadata = metaReader.Read();
+            Logger.Log(Level.Debug, $"metadata ready starting decompression");
 
             using (var pool = _factory.GetThreadPool())
             {
@@ -26,12 +32,15 @@ namespace packer
                     var writer = _factory.GetByteWriter(manager);
                     var decompressor = _factory.GetDecompressor();
 
+                    var readyCount = 0;
                     for (var i = 0; i < metadata.Chunks.Length; i++)
                     {
-                        var chunk = metadata.Chunks[i];
-                        var read = pool.Queue(ThreadPool.QueueType.Read, () => reader.Read(chunk.Index, chunk.Offset, chunk.Size));
-                        var zip = read.Then(ThreadPool.QueueType.Zip, () => decompressor.Zip(read.Result, chunk.Index));
-                        zip.Then(ThreadPool.QueueType.Write, () => writer.Write(zip.Result, chunk.Index, chunk.Index * metadata.ChunkSize));
+                        var index = i;
+                        var chunk = metadata.Chunks[index];
+                        pool.Queue(QueueType.Read, () => reader.Read(chunk.Index, chunk.Offset, chunk.Size))
+                            .Then(QueueType.Zip, _ => decompressor.Zip(_.Result, chunk.Index))
+                            .Then(QueueType.Write, _ => writer.Write(_.Result, chunk.Index, chunk.Index * metadata.ChunkSize))
+                            .Then(QueueType.Write, () => Logger.Log(Level.Info, $"chunks {Interlocked.Increment(ref readyCount)} of {metadata.Chunks.Length} ready"));
                     }
                     pool.Wait();
                 }
