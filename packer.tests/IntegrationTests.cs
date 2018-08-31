@@ -4,7 +4,7 @@ using System.IO;
 namespace packer.tests
 {
     [TestFixture]
-    public class EndToEndTests
+    public class IntegrationTests
     {
         private string _source = Path.Combine(TestContext.CurrentContext.TestDirectory, "source.txt");
         private string _compressed = Path.Combine(TestContext.CurrentContext.TestDirectory, "compressed.txt");
@@ -14,11 +14,16 @@ namespace packer.tests
         [SetUp]
         public void Setup()
         {
-            
+            RemoveTempFiles();
         }
 
         [TearDown]
         public void TearDown()
+        {
+            RemoveTempFiles();
+        }
+
+        private void RemoveTempFiles()
         {
             if (File.Exists(_source))
                 File.Delete(_source);
@@ -29,7 +34,7 @@ namespace packer.tests
         }
 
         [Test]
-        public void Endtoend()
+        public void EndToEnd()
         {
             File.WriteAllText(_source, "Lorem!");
             var compres = new CompressStrategy(new CompressSettings() { ChunkSize = 1024, PoolSize = 1 });
