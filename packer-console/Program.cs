@@ -11,6 +11,7 @@ namespace console
         //fsutil file createnew C:\testfile.txt 1000
         static void Main(params string[] args)
         {
+            AppDomain.CurrentDomain.UnhandledException += UnhandledException;
             try
             {
                 var result = Parser.Default.ParseArguments<CompressOptions, DecompressOptions>(args);
@@ -28,9 +29,14 @@ namespace console
             Console.ReadLine();
         }
 
+        private static void UnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            Logger.Log(Level.Fatal, $"unhandled exception occurred in {sender}", (Exception)e.ExceptionObject);
+        }
+
         private static void Compress(CompressOptions options)
         {
-            var settings = new CompressSettings { ChunkSize = ConvertMegabytesToBytes(options), PoolSize = 4 };
+            var settings = new CompressSettings { ChunkSize = ConvertMegabytesToBytes(options), PoolSize = options.Poolsize };
             IStrategy strategy = new CompressStrategy(settings);
             Work(strategy, options);
         }
