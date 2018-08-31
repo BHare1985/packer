@@ -1,3 +1,5 @@
+[![Build status](https://ci.appveyor.com/api/projects/status/c8k7b47x9fxeu612/branch/master?svg=true)](https://ci.appveyor.com/project/vladimir-shmidt/packer/branch/master)
+
 # Welcome to packer!
 packer is just for fun project that allow to zip and unzip large files with a help of [GZipStream](https://msdn.microsoft.com/ru-ru/library/system.io.compression.gzipstream%28v=vs.110%29.aspx) (take care of .NET Core 2.0 - it has bug in this library) [Memory Mapped Files](https://en.wikipedia.org/wiki/Memory-mapped_file) and custom Thread Pool implementation.
 
