@@ -8,6 +8,11 @@ Almost all logic connected to file compressing and decompressing aggregated into
 To run this solution you have to install .NET Core 2.1 framework and any IDE (Visual Studio 2017 / Studio Online) that allow to build it or build solution via .NET Core CLI
 ## Run and Debug
 F5 for Visual Studio on **packer-project** 
+to build console exe file run core cli commands:
+```
+dotnet publish -c Release -r x
+```
+where x is ubuntu.16.10-x64 or win10-x64 depends on target machine
 ## Tests
 packer.tests project with only one integration test that check compress and decompress work good and do not break content
 

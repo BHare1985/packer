@@ -7,8 +7,8 @@ namespace SimpleLogger
     {
         None = 0,
         Info = 2,
-        Verbose = 4,
+        Verbose = 4 | Info,
         Fatal = 8,
-        Debug = 16,
+        Debug = 16 | Verbose | Fatal,
     }
 }

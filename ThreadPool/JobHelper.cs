@@ -10,7 +10,7 @@ namespace ThreadPool
             var job = new Job(payload);
             job.SetPriority(priority);
             current.AddNext(job);
-            Logger.Log(Level.Verbose, $"job {job.Id} was connected to {current.Id}");
+            Logger.Log(Level.Verbose, $"job {job.Id} was connected next to {current.Id}");
             return job;
         }
 
@@ -19,7 +19,7 @@ namespace ThreadPool
             var job = new Job(payload);
             job.SetPriority(priority);
             current.AddNext(job);
-            Logger.Log(Level.Verbose, $"job {job.Id} was connected to {current.Id}");
+            Logger.Log(Level.Verbose, $"job {job.Id} was connected next to {current.Id}");
             return job;
         }
 
@@ -28,7 +28,7 @@ namespace ThreadPool
             var job = new Job<TResult>(payload);
             job.SetPriority(priority);
             current.AddNext(job);
-            Logger.Log(Level.Verbose, $"job {job.Id} was connected to {current.Id}");
+            Logger.Log(Level.Verbose, $"job {job.Id} was connected next to {current.Id}");
             return job;
         }
     }
