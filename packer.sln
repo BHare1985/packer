@@ -11,7 +11,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "packer", "packer\packer.csp
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "packer.tests", "packer.tests\packer.tests.csproj", "{67F5AA48-15B6-4385-9602-4B21E0DE9300}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleLogger", "SimpleLogger\SimpleLogger.csproj", "{1E57E0AB-BE9A-4F2E-8FE6-A4F3BA06E965}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleLogger", "SimpleLogger\SimpleLogger.csproj", "{1E57E0AB-BE9A-4F2E-8FE6-A4F3BA06E965}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{B7896ED7-9E07-4C7D-AC15-C1677222365A}"
+	ProjectSection(SolutionItems) = preProject
+		LICENSE = LICENSE
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
