@@ -27,6 +27,7 @@ To be able to decompress file back we need to know order of chunks we have writt
 
 # Usage
 Command line arguments:
+
   c compress      Compressing given source into destination
 	  -c, --chunksize      (Default: 1) Size of chunk in megabytes that will be used for compress
 
@@ -39,7 +40,8 @@ Command line arguments:
 	  -l, --loglevel       Set logging level from None to Verbose
 
 	  --help               Display this help screen.
-  
+
+
   d decompress    Decompressing given source into destination
 	  -s, --source         Required. Path to source file
 
