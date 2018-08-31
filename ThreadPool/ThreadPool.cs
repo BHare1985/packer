@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SimpleLogger;
+using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
@@ -7,7 +8,7 @@ namespace ThreadPool
 {
     public class ThreadPool : IDisposable
     {
-        private readonly ConcurrentBag<Task> _workers = new ConcurrentBag<Task>();
+        private readonly ConcurrentBag<Worker> _workers = new ConcurrentBag<Worker>();
         private readonly IPriorityQueue _queue;
         private readonly int _threadCount;
         private bool _disposed;
@@ -22,65 +23,83 @@ namespace ThreadPool
 
         public void Dispose()
         {
+            Logger.Log(Level.Debug, "disposing thread pool");
             _disposed = true;
+            Logger.Log(Level.Debug, "waiting for pending workers");
             SpinWait.SpinUntil(() => _workers.All(w => w.State == State.Stopped));
-            while(_workers.TryTake(out Task task)) { }
+            Logger.Log(Level.Debug, "all workers finished their job");
+            while (_workers.TryTake(out Worker worker)) { }
+            Logger.Log(Level.Debug, "workers destroyed");
             _queue.Dispose();
-            Console.WriteLine("Pool disposed...");
+            Logger.Log(Level.Debug, "thread pool disposed");
         }
 
         public void Wait()
         {
+            Logger.Log(Level.Verbose, $"waiting for {_queue.Count} tasks to be processed");
             SpinWait.SpinUntil(() => _queue.Count == 0 && _workers.All(w => w.State == State.Idle));
+            Logger.Log(Level.Verbose, "all queued tasks were processed");
         }
 
-        public WorkT<T> Queue<T>(QueueType priority, Func<T> payload)
+        public Job<T> Queue<T>(QueueType priority, Func<T> payload)
         {
-            if (_workers.Count < _threadCount)
+            Logger.Log(Level.Verbose, $"queuing new job with {priority} priority");
+            if (_workers.Count < _threadCount && !_workers.Any(_ => _.State == State.Idle))
             {
-                var worker = new Task(new Thread(new ParameterizedThreadStart(Loop)));
+                Logger.Log(Level.Verbose, $"all available workers are busy ({_workers.Count} of {_threadCount}) pool will be increased by new worker");
+                var worker = new Worker(new Thread(new ParameterizedThreadStart(Loop)));
                 _workers.Add(worker);
                 worker.Thread.Start(worker);
+                Logger.Log(Level.Verbose, $"new worker {worker.Id} added actual workers count {_workers.Count}");
             }
 
-            var work = new WorkT<T>(payload);
-            _queue.Enqueue(work, priority);
-            return work;
+            var job = new Job<T>(payload);
+            _queue.Enqueue(job, priority);
+            
+            return job;
         }
 
         private void Loop(object o)
         {
             var idle = new AutoResetEvent(false);
-            var th = (Task)o;
+            var worker = (Worker)o;
             while (!_disposed)
             {
                 try
                 {
-                    if (_queue.Dequeue(out Work work))
+                    Logger.Log(Level.Verbose, $"worker {worker.Id} looking for new job");
+                    if (_queue.Dequeue(out Job job))
                     {
-                        th.State = State.Working;
-                        work.Run();
-                        if (work.Next != null)
+                        Logger.Log(Level.Verbose, $"worker {worker.Id} found new job {job.Id}");
+                        worker.State = State.Working;
+                        var result = job.Run();
+                        Logger.Log(Level.Verbose, $"worker {worker.Id} job {job.Id} finished");
+                        if (job.Next != null && job.Next.Any())
                         {
-                            foreach (var next in work.Next)
+                            Logger.Log(Level.Verbose, $"worker {worker.Id} queuing continuation jobs for {job.Id}");
+                            foreach (var next in job.Next)
+                            {
                                 _queue.Enqueue(next, next.Priority);
-                            work.Dispose();
+                                Logger.Log(Level.Verbose, $"job {next.Id} with {next.Priority} was queued");
+                            }
                         }
+                        Logger.Log(Level.Verbose, $"worker {worker.Id} disposing finished job {job.Id}");
                     }
                     else
                     {
+                        Logger.Log(Level.Verbose, $"worker {worker.Id} nothing to do going to sleep for 1 second");
                         idle.Reset();
                         idle.WaitOne(TimeSpan.FromSeconds(1));
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("From {0}", Thread.CurrentThread.ManagedThreadId);
-                    Console.WriteLine(ex);
+                    Logger.Log(Level.Fatal, $"worker {worker.Id} failed when tried to do the job: {ex}");
                 }
-                th.State = State.Idle;
+                worker.State = State.Idle;
             }
-            th.State = State.Stopped;
+            Logger.Log(Level.Verbose, $"pool was disposed terminating worker {worker.Id}");
+            worker.State = State.Stopped;
         }
     }
 }

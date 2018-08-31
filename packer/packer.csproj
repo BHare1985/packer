@@ -9,6 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SimpleLogger\SimpleLogger.csproj" />
     <ProjectReference Include="..\ThreadPool\ThreadPool.csproj" />
   </ItemGroup>
 

@@ -1,6 +1,6 @@
-﻿using System;
+﻿using SimpleLogger;
+using System;
 using System.IO;
-using System.Threading;
 
 namespace packer
 {
@@ -14,13 +14,15 @@ namespace packer
         }
         public byte[] Read(long index, long offset, long length)
         {
-            Console.WriteLine("{1} Reading bytes from: {0}", Thread.CurrentThread.ManagedThreadId, index);
-
+            Logger.Log(Level.Verbose, $"reading bytes for chunk number {index} from {offset} offset of {length} bytes");
             using (var file = File.OpenRead(_file))
             {
+                Logger.Log(Level.Verbose, $"file {_file} opened for read");
                 file.Seek(offset, SeekOrigin.Begin);
+                Logger.Log(Level.Verbose, $"set read position to {offset} offset");
                 var chunk = new byte[length];
                 var size = file.Read(chunk, 0, (int)length);
+                Logger.Log(Level.Verbose, $"have read {size} bytes");
                 if (size != length)
                     Array.Resize(ref chunk, size);
                 return chunk;

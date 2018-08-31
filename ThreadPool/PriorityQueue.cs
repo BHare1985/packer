@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SimpleLogger;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -6,7 +7,7 @@ namespace ThreadPool
 {
     internal class PriorityQueue : IPriorityQueue
     {
-        private Queue<Work>[] _queue;
+        private Queue<Job>[] _queue;
         private object _sync;
 
         public int Count => _queue.Sum(_ => _.Count);
@@ -14,24 +15,31 @@ namespace ThreadPool
         public PriorityQueue()
         {
             _sync = new object();
-            _queue = Enum.GetNames(typeof(QueueType)).Select(_ => new Queue<Work>()).ToArray();
+            _queue = Enum.GetNames(typeof(QueueType)).Select(_ => new Queue<Job>()).ToArray();
         }
 
-        public void Enqueue(Work work, QueueType priority)
+        public void Enqueue(Job job, QueueType priority)
         {
             lock(_sync)
-                _queue[(int)priority - 1].Enqueue(work);
+                _queue[(int)priority].Enqueue(job);
+            Logger.Log(Level.Verbose, $"job {job.Id} with {priority} was queued");
         }
 
-        public bool Dequeue(out Work work)
+        public bool Dequeue(out Job job)
         {
-            work = Dequeue();
-            return work != null;
+            job = Dequeue();
+            var hasJob = job != null;
+            
+            if(!hasJob)
+                Logger.Log(Level.Verbose, $"no jobs in the queue");
+            else
+                Logger.Log(Level.Verbose, $"dequeue {job.Id} from {job.Priority} queue");
+            return hasJob;
         }
 
-        private Work Dequeue()
+        private Job Dequeue()
         {
-            Work work = null;
+            Job work = null;
             lock(_sync)
             {
                 var queue = _queue.FirstOrDefault(_ => _.Count > 0);
@@ -49,6 +57,7 @@ namespace ThreadPool
                     while (queue.Count > 0)
                         queue.Dequeue();
                 _queue = null;
+                Logger.Log(Level.Debug, "queue disposed");
             }
         }
     }

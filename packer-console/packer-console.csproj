@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\packer\packer.csproj" />
+    <ProjectReference Include="..\SimpleLogger\SimpleLogger.csproj" />
   </ItemGroup>
 
 </Project>

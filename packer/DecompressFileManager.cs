@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SimpleLogger;
+using System;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 
@@ -24,7 +25,9 @@ namespace packer
 
         public void Dispose()
         {
+            Logger.Log(Level.Debug, $"disposing file manager");
             _mmf.Dispose();
+            Logger.Log(Level.Debug, $"file manager disposed");
         }
 
         public void EndWrite()

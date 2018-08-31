@@ -2,9 +2,9 @@
 {
     public enum QueueType
     {
-        None,
         Write,
         Zip,
         Read,
+        None,
     }
 }

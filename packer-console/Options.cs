@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using SimpleLogger;
 
 namespace console
 {
@@ -12,5 +13,8 @@ namespace console
 
         [Option('p', "poolsize", Required = false, Default = 4, HelpText = "Threads amount used for operations")]
         public int Poolsize { get; set; }
+
+        [Option('l', "loglevel", Required = false, HelpText = "Set logging level from None to Verbose")]
+        public Level? LogLevel { get; set; }
     }
 }
