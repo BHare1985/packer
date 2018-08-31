@@ -1,6 +1,5 @@
 ﻿using SimpleLogger;
 using System;
-using System.Collections.Concurrent;
 using System.IO;
 using System.Threading;
 using ThreadPool;
@@ -47,8 +46,9 @@ namespace packer
                             .Then(QueueType.Write, _ => writer.Write(_.Result, index))
                             .Then(QueueType.Write, _ => { metadata.Add(_.Result); Logger.Log(Level.Info, $"chunks {Interlocked.Increment(ref readyCount)} of {chunkCount} ready"); });
                     }
-                    Logger.Log(Level.Verbose, $"waiting for queued work to be ready");
-                    pool.Wait();
+                    Logger.Log(Level.Verbose, $"waiting for {readyCount} tasks to be processed");
+                    SpinWait.SpinUntil(() => readyCount == chunkCount);
+                    Logger.Log(Level.Verbose, "all queued tasks were processed");
                 }
             }
             metadata.Write(_settings.ChunkSize, sourceInfo.Length);

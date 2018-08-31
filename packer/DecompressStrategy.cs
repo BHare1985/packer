@@ -42,7 +42,9 @@ namespace packer
                             .Then(QueueType.Write, _ => writer.Write(_.Result, chunk.Index, chunk.Index * metadata.ChunkSize))
                             .Then(QueueType.Write, () => Logger.Log(Level.Info, $"chunks {Interlocked.Increment(ref readyCount)} of {metadata.Chunks.Length} ready"));
                     }
-                    pool.Wait();
+                    Logger.Log(Level.Verbose, $"waiting for {metadata.Chunks.Length} tasks to be processed");
+                    SpinWait.SpinUntil(() => readyCount == metadata.Chunks.Length);
+                    Logger.Log(Level.Verbose, "all queued tasks were processed");
                 }
             }
         }

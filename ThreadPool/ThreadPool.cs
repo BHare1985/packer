@@ -34,13 +34,6 @@ namespace ThreadPool
             Logger.Log(Level.Debug, "thread pool disposed");
         }
 
-        public void Wait()
-        {
-            Logger.Log(Level.Verbose, $"waiting for {_queue.Count} tasks to be processed");
-            SpinWait.SpinUntil(() => _queue.Count == 0 && _workers.All(w => w.State == State.Idle));
-            Logger.Log(Level.Verbose, "all queued tasks were processed");
-        }
-
         public Job<T> Queue<T>(QueueType priority, Func<T> payload)
         {
             Logger.Log(Level.Verbose, $"queuing new job with {priority} priority");
@@ -67,34 +60,34 @@ namespace ThreadPool
             {
                 try
                 {
-                    Logger.Log(Level.Verbose, $"worker {worker.Id} looking for new job");
+                    Logger.Log(Level.Verbose, $"worker {worker.Id}: looking for new job");
                     if (_queue.Dequeue(out Job job))
                     {
-                        Logger.Log(Level.Verbose, $"worker {worker.Id} found new job {job.Id}");
+                        Logger.Log(Level.Verbose, $"worker {worker.Id}: found new job {job.Id}");
                         worker.State = State.Working;
                         var result = job.Run();
-                        Logger.Log(Level.Verbose, $"worker {worker.Id} job {job.Id} finished");
+                        Logger.Log(Level.Verbose, $"worker {worker.Id}: job {job.Id} finished");
                         if (job.Next != null && job.Next.Any())
                         {
-                            Logger.Log(Level.Verbose, $"worker {worker.Id} queuing continuation jobs for {job.Id}");
+                            Logger.Log(Level.Verbose, $"worker {worker.Id}: queuing continuation jobs for {job.Id}");
                             foreach (var next in job.Next)
                             {
                                 _queue.Enqueue(next, next.Priority);
                                 Logger.Log(Level.Verbose, $"job {next.Id} with {next.Priority} was queued");
                             }
                         }
-                        Logger.Log(Level.Verbose, $"worker {worker.Id} disposing finished job {job.Id}");
+                        Logger.Log(Level.Verbose, $"worker {worker.Id}: disposing finished job {job.Id}");
                     }
                     else
                     {
-                        Logger.Log(Level.Verbose, $"worker {worker.Id} nothing to do going to sleep for 1 second");
+                        Logger.Log(Level.Verbose, $"worker {worker.Id}: nothing to do going to sleep for 1 second");
                         idle.Reset();
                         idle.WaitOne(TimeSpan.FromSeconds(1));
                     }
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log(Level.Fatal, $"worker {worker.Id} failed when tried to do the job: {ex}");
+                    Logger.Log(Level.Fatal, $"worker {worker.Id}: failed when tried to do the job: {ex}");
                 }
                 worker.State = State.Idle;
             }
