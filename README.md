@@ -1,6 +1,9 @@
 # Welcome to packer!
 packer is just for fun project that allow to zip and unzip large files with a help of [GZipStream](https://msdn.microsoft.com/ru-ru/library/system.io.compression.gzipstream%28v=vs.110%29.aspx) (take care of .NET Core 2.0 - it has bug in this library) [Memory Mapped Files](https://en.wikipedia.org/wiki/Memory-mapped_file) and custom Thread Pool implementation.
 
+# TODO
+work cancelation (add cancelation source to stop process and exit)
+
 # Project
 Solution consist of three projects: **packer** **packer-console** **ThreadPool** and **SimpleLogger**.
 Almost all logic connected to file compressing and decompressing aggregated into **packer**. **packer-console** is UI that allow to run pack operations via console. **ThreadPool** is rounded because of course so as you can use build in .net thread pool. But it was part of plan to take a challenge and implement my own (do not do this in real world :) ).
@@ -22,7 +25,7 @@ Problems happens when you try to do this by several threads that are in race con
 There is no order in writing threads. Any thread can take any chunk and write it to nearest position (offset given by *CompressFileManager*). Structure of compressed file isn't straightforward and could not be mapped one to one for source file. But this allow to avoid concurrency for writing threads and as a result no blocks happens for write operation (for real there is one tine atomic operation of calculating writing offset in *GetOffset*. This synchronization uses *Interlocked* under the hood. Interlocked is highly performance blocking operation that implemented on a processor level).
 To be able to decompress file back we need to know order of chunks we have written so we are writing chunks metadata to the end of the file after compression. Also we are writing chinks count, initial file size and chunk size. Then with a help of metadata we can recreate an order of chunks and write them back after decompression.
 
-#Usage
+# Usage
 Command line arguments:
   c compress      Compressing given source into destination
 	  -c, --chunksize      (Default: 1) Size of chunk in megabytes that will be used for compress
