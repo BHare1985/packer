@@ -30,32 +30,37 @@ To be able to decompress file back we need to know order of chunks we have writt
 # Usage
 Command line arguments:
 
-  c compress      Compressing given source into destination
-	  -c, --chunksize      (Default: 1) Size of chunk in megabytes that will be used for compress
+  c compress Compressing given source into destination
 
-	  -s, --source         Required. Path to source file
+    -c, --chunksize      (Default: 1) Size of chunk in megabytes that will be used for compress
 
-	  -d, --destination    Required. Path to destination file
+    -s, --source         Required. Path to source file
 
-	  -p, --poolsize       (Default: 4) Threads amount used for operations
+    -d, --destination    Required. Path to destination file
 
-	  -l, --loglevel       Set logging level from None to Verbose
+    -p, --poolsize       (Default: 4) Threads amount used for operations
 
-	  --help               Display this help screen.
-
+    -l, --loglevel       Set logging level from None to Verbose 
+                           None - nothing being logged
+                           Fatal - errors only
+                           Info - progress information and fatal level
+                           Verbose - info level plus most detailed information about progress and internal actions
+                           Debug - same as verbose and fatal but with technical information about resource disposal
 
   d decompress    Decompressing given source into destination
-	  -s, --source         Required. Path to source file
 
-	  -d, --destination    Required. Path to destination file
+    -s, --source         Required. Path to source file
 
-	  -p, --poolsize       (Default: 4) Threads amount used for operations
+    -d, --destination    Required. Path to destination file
 
-	  -l, --loglevel       Set logging level from None to Verbose
+    -p, --poolsize       (Default: 4) Threads amount used for operations
 
-	  --help               Display this help screen.
-
-	  --version            Display version information.
+    -l, --loglevel       Set logging level from None to Verbose 
+                           None - nothing being logged
+                           Fatal - errors only
+                           Info - progress information and fatal level
+                           Verbose - info level plus most detailed information about progress and internal actions
+                           Debug - same as verbose and fatal but with technical information about resource disposal
   
   help          Display more information on a specific command.
 
