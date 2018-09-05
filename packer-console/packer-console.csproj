@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\packer\packer.csproj" />
     <ProjectReference Include="..\SimpleLogger\SimpleLogger.csproj" />
   </ItemGroup>
