@@ -2,7 +2,7 @@
   "profiles": {
     "packer-console": {
       "commandName": "Project",
-      "commandLineArgs": "compress -s source.txt -d compressed.any -f true"
+      "commandLineArgs": "compress -s source.txt -d compressed.any -f true -l Info"
     }
   }
 }

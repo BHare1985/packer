@@ -15,7 +15,7 @@ namespace console
         public int Poolsize { get; set; }
 
         [Option('l', "loglevel", Required = false, HelpText = "Set logging level from None to Verbose")]
-        public Level? LogLevel { get; set; }
+        public Level LogLevel { get; set; }
 
         [Option('f', "force", Required = false, HelpText = "Will overwrite destination file if exists")]
         public bool IsForce { get; set; }

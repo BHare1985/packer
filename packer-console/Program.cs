@@ -56,7 +56,7 @@ namespace console
 
         private static void Work(IStrategy strategy, Options options)
         {
-            Logger.SetWriter(new ConsoleWriter(options.LogLevel ?? Level.Debug));
+            Logger.SetWriter(new ConsoleWriter(options.LogLevel));
 
             CheckReadWrite(options);
 
