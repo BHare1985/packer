@@ -1,12 +1,11 @@
-﻿using SimpleLogger;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace ThreadPool
 {
-    public class Job// : IDisposable
+    public class Job
     {
         internal Delegate _payload;
 
@@ -49,14 +48,5 @@ namespace ThreadPool
         }
 
         protected virtual void Disposing() { }
-
-        //public void Dispose()
-        //{
-        //    _payload = null;
-        //    while (_next != null && _next.Count > 0){ if (_next.TryTake(out Job job)) { } }
-        //    _next = null;
-        //    Disposing();
-        //    Logger.Log(Level.Debug, $"job {Id} disposed");
-        //}
     }
 }
