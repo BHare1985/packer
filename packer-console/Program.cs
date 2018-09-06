@@ -21,7 +21,7 @@ namespace console
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
+                Logger.Log(Level.Fatal, ex.Message, ex);
             }
             
             Console.WriteLine("FINISHED. Press any key");
@@ -56,7 +56,7 @@ namespace console
 
         private static void Work(IStrategy strategy, Options options)
         {
-            Logger.SetWriter(new ConsoleWriter(options.LogLevel));
+            Logger.SetWriter(new ConsoleWriter(options.LogLevel == Level.None ? Level.Info : options.LogLevel));
 
             CheckReadWrite(options);
 
@@ -85,7 +85,7 @@ namespace console
             try
             {
                 var source = new FileInfo(options.Source);
-                if (source.Length == 0) throw new SourceFileIsEmptyException($"nothing to compress so as file {options.Source} is empty");
+                if (!source.Exists || source.Length == 0) throw new SourceFileIsEmptyException($"nothing to compress so as file {options.Source} is missing or empty");
                 using (var file = source.OpenRead())
                 {
                     var buffer = new byte[1];
