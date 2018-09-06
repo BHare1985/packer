@@ -14,7 +14,7 @@ namespace SimpleLogger
 
         protected virtual string Format(string type, Level level, string message)
         {
-            return $"[{DateTime.UtcNow}] [{type}] [{level}] ({Thread.CurrentThread.ManagedThreadId}) {message}";
+            return $"[{DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.FFF")}] [{type}] [{level}] ({Thread.CurrentThread.ManagedThreadId}) {message}";
         }
 
         protected abstract void WriteLine(string message);
