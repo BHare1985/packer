@@ -1,4 +1,5 @@
 ﻿using SimpleLogger;
+using System.Linq;
 using System.Threading;
 using ThreadPool;
 
@@ -33,10 +34,8 @@ namespace packer
                     var decompressor = _factory.GetDecompressor();
 
                     var readyCount = 0;
-                    for (var i = 0; i < metadata.Chunks.Length; i++)
+                    foreach (var chunk in metadata.Chunks.OrderBy(_ => _.Offset))
                     {
-                        var index = i;
-                        var chunk = metadata.Chunks[index];
                         pool.Queue(QueueType.Read, () => reader.Read(chunk.Index, chunk.Offset, chunk.Size))
                             .Then(QueueType.Zip, _ => decompressor.Zip(_.Result, chunk.Index))
                             .Then(QueueType.Write, _ => writer.Write(_.Result, chunk.Index, chunk.Index * metadata.ChunkSize))
