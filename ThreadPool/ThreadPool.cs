@@ -47,6 +47,7 @@ namespace ThreadPool
             }
 
             var job = new Job<T>(payload);
+            job.SetPriority(priority);
             _queue.Enqueue(job, priority);
             
             return job;
